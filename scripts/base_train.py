@@ -37,6 +37,7 @@ device_type = "" # cuda|cpu|mps (empty => autodetect good device type default, i
 # Model architecture
 depth = 20 # the depth of the Transformer model to train, rest of the kwargs are derived
 max_seq_len = 2048 # max context length
+attention_gate = "standard" # "standard" | "gated_sigmoid" | "gated_softplus"
 # Training horizon. Only one of these 3 will be used, in this order of precedence.
 num_iterations = -1 # explicit number of steps of the optimization (-1 = disable)
 target_flops = -1.0 # calculate num_iterations to reach target_flops. Useful for scaling laws experiments (-1 = disable)
@@ -91,10 +92,14 @@ num_layers = depth
 model_dim = depth * 64 # aspect ratio 64 (usually this is varied from 64 -> 128 as model size increases)
 num_heads = max(1, (model_dim + 127) // 128) # head dim 128 (the division here is ceil div)
 num_kv_heads = num_heads # default is 1:1 GQA (Group Query Attention) ratio (i.e. GQA is disabled)
+# MLP expansion factor: reduce from 4.0 to 3.5 when using gated attention to keep param count similar
+mlp_expansion = 3.5 if attention_gate != "standard" else 4.0
 print0(f"num_layers: {num_layers}")
 print0(f"model_dim: {model_dim}")
 print0(f"num_heads: {num_heads}")
 print0(f"num_kv_heads: {num_kv_heads}")
+print0(f"attention_gate: {attention_gate}")
+print0(f"mlp_expansion: {mlp_expansion}")
 
 # Optimizer / data / training length related hyperparameters
 # figure out the needed gradient accumulation to reach the desired total batch size
@@ -110,7 +115,7 @@ print0(f"Total batch size {total_batch_size:,} => gradient accumulation steps: {
 # Initialize the Model
 
 # Create a new model with random weights
-model_config_kwargs = dict(sequence_len=max_seq_len, vocab_size=vocab_size, n_layer=num_layers, n_head=num_heads, n_kv_head=num_kv_heads, n_embd=model_dim)
+model_config_kwargs = dict(sequence_len=max_seq_len, vocab_size=vocab_size, n_layer=num_layers, n_head=num_heads, n_kv_head=num_kv_heads, n_embd=model_dim, attention_gate=attention_gate, mlp_expansion=mlp_expansion)
 with torch.device("meta"):
     model_config = GPTConfig(**model_config_kwargs)
     model = GPT(model_config)

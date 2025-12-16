@@ -31,6 +31,8 @@ class GPTConfig:
     n_head: int = 6 # number of query heads
     n_kv_head: int = 6 # number of key/value heads (GQA)
     n_embd: int = 768
+    attention_gate: str = "standard" # "standard" | "gated_sigmoid" | "gated_softplus"
+    mlp_expansion: float = 4.0 # MLP hidden dim = n_embd * mlp_expansion (use 3.5 with gating to keep param count equal)
 
 
 def norm(x):
@@ -62,6 +64,16 @@ class CausalSelfAttention(nn.Module):
         self.c_k = nn.Linear(self.n_embd, self.n_kv_head * self.head_dim, bias=False)
         self.c_v = nn.Linear(self.n_embd, self.n_kv_head * self.head_dim, bias=False)
         self.c_proj = nn.Linear(self.n_embd, self.n_embd, bias=False)
+        # Gated attention (Qwen3-next style)
+        self.attention_gate = config.attention_gate
+        if self.attention_gate != "standard":
+            self.c_gate = nn.Linear(self.n_embd, self.n_embd, bias=False)
+            if self.attention_gate == "gated_sigmoid":
+                self.gate_fn = torch.sigmoid
+            elif self.attention_gate == "gated_softplus":
+                self.gate_fn = F.softplus
+            else:
+                raise ValueError(f"Unknown attention_gate: {self.attention_gate}")
 
     def forward(self, x, cos_sin, kv_cache):
         B, T, C = x.size()
@@ -103,8 +115,13 @@ class CausalSelfAttention(nn.Module):
             attn_mask[:, prefix_len:] = torch.tril(torch.ones((Tq, Tq), dtype=torch.bool, device=q.device))
             y = F.scaled_dot_product_attention(q, k, v, attn_mask=attn_mask, enable_gqa=enable_gqa)
 
-        # Re-assemble the heads side by side and project back to residual stream
+        # Re-assemble the heads side by side
         y = y.transpose(1, 2).contiguous().view(B, T, -1)
+        # Apply gated attention if enabled (gate is computed from original input x)
+        if self.attention_gate != "standard":
+            gate = self.gate_fn(self.c_gate(x))
+            y = y * gate
+        # Project back to residual stream
         y = self.c_proj(y)
         return y
 
@@ -112,8 +129,9 @@ class CausalSelfAttention(nn.Module):
 class MLP(nn.Module):
     def __init__(self, config):
         super().__init__()
-        self.c_fc = nn.Linear(config.n_embd, 4 * config.n_embd, bias=False)
-        self.c_proj = nn.Linear(4 * config.n_embd, config.n_embd, bias=False)
+        hidden_dim = int(config.n_embd * config.mlp_expansion)
+        self.c_fc = nn.Linear(config.n_embd, hidden_dim, bias=False)
+        self.c_proj = nn.Linear(hidden_dim, config.n_embd, bias=False)
 
     def forward(self, x):
         x = self.c_fc(x)

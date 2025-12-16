@@ -5,10 +5,22 @@
 
 # 1) Example launch (simplest):
 # bash speedrun.sh
-# 2) Example launch in a screen session (because the run takes ~4 hours):
+# 2) Example launch with gated attention (sigmoid or softplus):
+# bash speedrun.sh gated_sigmoid
+# bash speedrun.sh gated_softplus
+# 3) Example launch in a screen session (because the run takes ~4 hours):
 # screen -L -Logfile speedrun.log -S speedrun bash speedrun.sh
-# 3) Example launch with wandb logging, but see below for setting up wandb first:
+# 4) Example launch with wandb logging, but see below for setting up wandb first:
 # WANDB_RUN=speedrun screen -L -Logfile speedrun.log -S speedrun bash speedrun.sh
+
+# Attention gate type: standard (default), gated_sigmoid, or gated_softplus
+ATTENTION_GATE=${1:-standard}
+if [[ "$ATTENTION_GATE" != "standard" && "$ATTENTION_GATE" != "gated_sigmoid" && "$ATTENTION_GATE" != "gated_softplus" ]]; then
+    echo "Invalid attention gate type: $ATTENTION_GATE"
+    echo "Usage: bash speedrun.sh [standard|gated_sigmoid|gated_softplus]"
+    exit 1
+fi
+echo "Using attention gate: $ATTENTION_GATE"
 
 # Default intermediate artifacts directory is in ~/.cache/nanochat
 export OMP_NUM_THREADS=1
@@ -86,7 +98,7 @@ wait $DATASET_DOWNLOAD_PID
 NPROC_PER_NODE=8
 
 # pretrain the d20 model
-torchrun --standalone --nproc_per_node=$NPROC_PER_NODE -m scripts.base_train -- --depth=20 --run=$WANDB_RUN
+torchrun --standalone --nproc_per_node=$NPROC_PER_NODE -m scripts.base_train -- --depth=20 --attention_gate=$ATTENTION_GATE --run=$WANDB_RUN
 # evaluate the model on a larger chunk of train/val data and draw some samples
 torchrun --standalone --nproc_per_node=$NPROC_PER_NODE -m scripts.base_loss
 # evaluate the model on CORE tasks

@@ -24,6 +24,7 @@ from nanochat.muon import Muon, DistMuon
 from nanochat.adamw import DistAdamW
 
 from torch.nn.attention import sdpa_kernel, SDPBackend
+from torch.utils.checkpoint import checkpoint
 
 @dataclass
 class GPTConfig:
@@ -88,13 +89,14 @@ class CausalSelfAttentionGatedSigmoid(nn.Module):
         Tq = q.size(2) # number of queries in this forward pass
         Tk = k.size(2) # number of keys/values in total (in the cache + current forward pass)
 
+
+
         # Attention: queries attend to keys/values autoregressively. A few cases to handle:
         enable_gqa = self.n_head != self.n_kv_head # Group Query Attention (GQA): duplicate key/value heads to match query heads if desired
         if kv_cache is None or Tq == Tk:
             # During training (no KV cache), attend as usual with causal attention
             # And even if there is KV cache, we can still use this simple version when Tq == Tk
-            with sdpa_kernel([SDPBackend.FLASH_ATTENTION, SDPBackend.EFFICIENT_ATTENTION]):
-                y = F.scaled_dot_product_attention(q, k, v, is_causal=True, enable_gqa=enable_gqa)
+            y = F.scaled_dot_product_attention(q, k, v, is_causal=True, enable_gqa=enable_gqa)
         elif Tq == 1:
             # During inference but with a single query in this forward pass:
             # The query has to attend to all the keys/values in the cache
@@ -114,14 +116,12 @@ class CausalSelfAttentionGatedSigmoid(nn.Module):
         # Apply gated attention if enabled (gate is computed from original input x)
         # Print dtype of y and x
 
-        gate = self.c_gate(x)
-        
-        gate = torch.sigmoid(gate)
-        print(f"y dtype: {y.dtype}\n")
-        print(f"gate dtype after sigmoid: {gate.dtype}\n")
-        print(f"x dtype: {x.dtype}\n")
-        print(f"gate dtype after sigmoid: {gate.dtype}\n")
-        return self.c_proj(y * gate)
+        def gated_mul(y, x):
+            gate = torch.sigmoid(self.c_gate(x))
+            return y * gate
+        y = checkpoint(gated_mul, y, x, use_reentrant=False, preserve_rng_state=False)
+
+        return self.c_proj(y)
 
 
 class CausalSelfAttentionGatedSoftplus(nn.Module):
@@ -165,8 +165,7 @@ class CausalSelfAttentionGatedSoftplus(nn.Module):
         if kv_cache is None or Tq == Tk:
             # During training (no KV cache), attend as usual with causal attention
             # And even if there is KV cache, we can still use this simple version when Tq == Tk
-            with sdpa_kernel([SDPBackend.FLASH_ATTENTION, SDPBackend.EFFICIENT_ATTENTION]):
-                y = F.scaled_dot_product_attention(q, k, v, is_causal=True, enable_gqa=enable_gqa)
+            y = F.scaled_dot_product_attention(q, k, v, is_causal=True, enable_gqa=enable_gqa)
         elif Tq == 1:
             # During inference but with a single query in this forward pass:
             # The query has to attend to all the keys/values in the cache
@@ -184,7 +183,7 @@ class CausalSelfAttentionGatedSoftplus(nn.Module):
         # Re-assemble the heads side by side
         y = y.transpose(1, 2).contiguous().view(B, T, -1)
         # Apply gated attention if enabled (gate is computed from original input x)
-        gate = F.softplus(self.c_gate(x).to(dtype=y.dtype))
+        gate = F.softplus(self.c_gate(x))
         return self.c_proj(y * gate)
 
 
@@ -228,8 +227,7 @@ class CausalSelfAttention(nn.Module):
         if kv_cache is None or Tq == Tk:
             # During training (no KV cache), attend as usual with causal attention
             # And even if there is KV cache, we can still use this simple version when Tq == Tk
-            with sdpa_kernel([SDPBackend.FLASH_ATTENTION, SDPBackend.EFFICIENT_ATTENTION]):
-                y = F.scaled_dot_product_attention(q, k, v, is_causal=True, enable_gqa=enable_gqa)
+            y = F.scaled_dot_product_attention(q, k, v, is_causal=True, enable_gqa=enable_gqa)
         elif Tq == 1:
             # During inference but with a single query in this forward pass:
             # The query has to attend to all the keys/values in the cache

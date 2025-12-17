@@ -113,12 +113,16 @@ class CausalSelfAttentionGatedSigmoid(nn.Module):
         y = y.transpose(1, 2).contiguous().view(B, T, -1)
         # Apply gated attention if enabled (gate is computed from original input x)
         # Print dtype of y and x
-        print(f"y dtype: {y.dtype}")
-        print(f"x dtype: {x.dtype}")
+
         gate = self.c_gate(x)
-        print(f"gate dtype: {gate.dtype}")
+        
         gate = torch.sigmoid(gate)
-        print(f"gate dtype after sigmoid: {gate.dtype}")
+        # Write these all to a file because dynamo doesn't like printing
+        with open("gate_debug.txt", "w") as f:
+            f.write(f"y dtype: {y.dtype}\n")
+            f.write(f"gate dtype after sigmoid: {gate.dtype}\n")
+            f.write(f"x dtype: {x.dtype}\n")
+            f.write(f"gate dtype after sigmoid: {gate.dtype}\n")
         return self.c_proj(y * gate)
 
 

@@ -120,6 +120,7 @@ class CausalSelfAttention(nn.Module):
         # Apply gated attention if enabled (gate is computed from original input x)
         if self.attention_gate != "standard":
             gate = self.gate_fn(self.c_gate(x))
+            gate = gate.to(dtype=y.dtype)
             y = y * gate
         # Project back to residual stream
         y = self.c_proj(y)
@@ -179,6 +180,9 @@ class GPT(nn.Module):
         for block in self.transformer.h:
             torch.nn.init.zeros_(block.mlp.c_proj.weight)
             torch.nn.init.zeros_(block.attn.c_proj.weight)
+            # zero out c_gate weights in all blocks
+            if self.config.attention_gate != "standard":
+                torch.nn.init.zeros_(block.attn.c_gate.weight)
         # init the rotary embeddings
         head_dim = self.config.n_embd // self.config.n_head
         cos, sin = self._precompute_rotary_embeddings(self.rotary_seq_len, head_dim)

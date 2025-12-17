@@ -83,7 +83,7 @@ class CausalSelfAttention(nn.Module):
         k = self.c_k(x).view(B, T, self.n_kv_head, self.head_dim)
         v = self.c_v(x).view(B, T, self.n_kv_head, self.head_dim)
         if self.attention_gate != "standard":
-            gate = self.gate_fn(self.c_gate(x)).to(dtype=y.dtype)
+            gate = self.gate_fn(self.c_gate(x)).to(dtype=q.dtype)
 
         # Apply Rotary Embeddings to queries and keys to get relative positional encoding
         cos, sin = cos_sin

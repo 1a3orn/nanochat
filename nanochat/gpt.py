@@ -117,10 +117,10 @@ class CausalSelfAttentionGatedSigmoid(nn.Module):
         gate = self.c_gate(x)
         
         gate = torch.sigmoid(gate)
-        print(f"y dtype: {y.dtype}\n", file=f)
-        print(f"gate dtype after sigmoid: {gate.dtype}\n", file=f)
-        print(f"x dtype: {x.dtype}\n", file=f)
-        print(f"gate dtype after sigmoid: {gate.dtype}\n", file=f)
+        print(f"y dtype: {y.dtype}\n")
+        print(f"gate dtype after sigmoid: {gate.dtype}\n")
+        print(f"x dtype: {x.dtype}\n")
+        print(f"gate dtype after sigmoid: {gate.dtype}\n")
         return self.c_proj(y * gate)
 
 

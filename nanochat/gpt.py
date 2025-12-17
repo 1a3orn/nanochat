@@ -112,7 +112,13 @@ class CausalSelfAttentionGatedSigmoid(nn.Module):
         # Re-assemble the heads side by side
         y = y.transpose(1, 2).contiguous().view(B, T, -1)
         # Apply gated attention if enabled (gate is computed from original input x)
-        gate = torch.sigmoid(self.c_gate(x).to(dtype=y.dtype))
+        # Print dtype of y and x
+        print(f"y dtype: {y.dtype}")
+        print(f"x dtype: {x.dtype}")
+        gate = self.c_gate(x)
+        print(f"gate dtype: {gate.dtype}")
+        gate = torch.sigmoid(gate)
+        print(f"gate dtype after sigmoid: {gate.dtype}")
         return self.c_proj(y * gate)
 
 

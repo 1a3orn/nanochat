@@ -1,11 +1,13 @@
 Running procedure:
 ```
 command -v uv &> /dev/null || curl -LsSf https://astral.sh/uv/install.sh | sh
+source $HOME/.local/bin/env
 uv venv
 uv sync --extra gpu
 source .venv/bin/activate
 wandb login
-# bash speedrun.sh gated_sigmoid
+WANDB_RUN=gated_sigmoid bash speedrun.sh gated_sigmoid
+
 ```
 
 

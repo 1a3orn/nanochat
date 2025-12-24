@@ -113,12 +113,8 @@ class CausalSelfAttentionGatedSigmoid(nn.Module):
         # Apply gated attention if enabled (gate is computed from original input x)
         # Print dtype of y and x
 
-        def gated_mul(y, x):
-            gate = torch.sigmoid(self.c_gate(x))
-            return y * gate
-        y = checkpoint(gated_mul, y, x, use_reentrant=False, preserve_rng_state=False)
-
-        return self.c_proj(y)
+        gate = torch.sigmoid(self.c_gate(x))
+        return self.c_proj(y * gate)
 
 
 class CausalSelfAttentionGatedSoftplus(nn.Module):
